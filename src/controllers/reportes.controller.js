@@ -1,5 +1,6 @@
 const { supabase } = require('../config/supabase');
 
+// Obtener todos los reportes
 const getReportes = async (req, res, next) => {
     try {
         const { data, error } = await supabase
@@ -19,6 +20,7 @@ const getReportes = async (req, res, next) => {
     }
 };
 
+// Obtener un reporte por ID
 const getReporteById = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -43,10 +45,15 @@ const getReporteById = async (req, res, next) => {
     }
 };
 
+// Crear un nuevo reporte
 const createReporte = async (req, res, next) => {
     try {
         const { categoria_id, descripcion, latitud, longitud, direccion } = req.body;
         const usuario_id = req.user.id;
+
+        if (!descripcion) {
+            return res.status(400).json({ error: 'La descripción es obligatoria' });
+        }
 
         // Obtener id del estado 'pendiente' para reporte
         const { data: estado, error: estadoError } = await supabase
@@ -89,6 +96,7 @@ const createReporte = async (req, res, next) => {
     }
 };
 
+// Actualizar el estado de un reporte (funcionario/admin)
 const updateEstadoReporte = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -129,9 +137,53 @@ const updateEstadoReporte = async (req, res, next) => {
     }
 };
 
+// Actualizar un reporte completo (datos del reporte, no solo estado)
+const updateReporte = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { categoria_id, descripcion, latitud, longitud, direccion } = req.body;
+
+        const { data, error } = await supabase
+            .from('reportes')
+            .update({ categoria_id, descripcion, latitud, longitud, direccion })
+            .eq('id_reporte', id)
+            .select(`
+                *,
+                usuarios(nombre, correo),
+                categorias(nombre, areas(nombre)),
+                estados(nombre, color)
+            `)
+            .single();
+
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: 'Reporte no encontrado' });
+        res.json(data);
+    } catch (err) {
+        next(err);
+    }
+};
+
+// Eliminar un reporte
+const deleteReporte = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase
+            .from('reportes')
+            .delete()
+            .eq('id_reporte', id);
+
+        if (error) throw error;
+        res.json({ message: 'Reporte eliminado correctamente' });
+    } catch (err) {
+        next(err);
+    }
+};
+
 module.exports = {
     getReportes,
     getReporteById,
     createReporte,
-    updateEstadoReporte
+    updateEstadoReporte,
+    updateReporte,
+    deleteReporte
 };
