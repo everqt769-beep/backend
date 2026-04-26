@@ -1,0 +1,85 @@
+-- ====================== INSERTAR DATOS EN ESTADOS ======================
+
+INSERT INTO estados (entidad, codigo, nombre, color, descripcion) VALUES
+
+-- Estados para REPORTES
+('reporte', 'pendiente', 'Pendiente', '#F59E0B', 'Reporte creado, esperando revision'),
+('reporte', 'en_revision', 'En Revision', '#3B82F6', 'Funcionario esta evaluando el reporte'),
+('reporte', 'asignado', 'Asignado', '#8B5CF6', 'Reporte asignado a un funcionario'),
+('reporte', 'en_proceso', 'En Proceso', '#EC4899', 'Se esta trabajando en la solucion'),
+('reporte', 'resuelto', 'Resuelto', '#10B981', 'Problema solucionado'),
+('reporte', 'rechazado', 'Rechazado', '#EF4444', 'No procede o es falso'),
+('reporte', 'duplicado', 'Duplicado', '#6B7280', 'Ya existe otro reporte igual'),
+
+-- Estados para USUARIOS
+('usuario', 'activo', 'Activo', '#10B981', 'Usuario puede reportar y comentar'),
+('usuario', 'bloqueado', 'Bloqueado', '#EF4444', 'Usuario no puede usar el sistema'),
+
+-- Estados para ADJUNTOS
+('adjunto', 'pendiente_mod', 'Pendiente', '#F59E0B', 'Esperando moderacion'),
+('adjunto', 'aprobado_mod', 'Aprobado', '#10B981', 'Foto valida'),
+('adjunto', 'rechazado_mod', 'Rechazado', '#EF4444', 'Foto inapropiada o falsa'),
+
+-- Estados para ASIGNACIONES
+('asignacion', 'activa', 'Activa', '#10B981', 'Funcionario trabajando en el caso'),
+('asignacion', 'pausada', 'Pausada', '#F59E0B', 'Esperando recursos o informacion'),
+('asignacion', 'completada', 'Completada', '#6B7280', 'Trabajo finalizado');
+
+
+-- ====================== INSERTAR DATOS EN AREAS ======================
+
+INSERT INTO areas (nombre, descripcion, telefono, email) VALUES
+
+('Servicios Basicos', 'Agua potable, alcantarillado y aguas servidas', '222-1234', 'agua@municipio.bo'),
+('Alumbrado Publico', 'Luminarias, postes y sistemas de iluminacion', '222-1235', 'alumbrado@municipio.bo'),
+('Vias y Transporte', 'Baches, calles sin pavimento y mantenimiento vial', '222-1236', 'vias@municipio.bo'),
+('Aseo Urbano', 'Recoleccion de basura y limpieza de microbasurales', '222-1237', 'aseo@municipio.bo'),
+('Areas Verdes', 'Parques, plazas, poda de arboles y jardineria', '222-1238', 'parques@municipio.bo'),
+('Transito', 'Semaforos, señales de transito y regulacion', '222-1239', 'transito@municipio.bo'),
+('Control Urbano', 'Vendedores ambulantes y construcciones ilegales', '222-1240', 'control@municipio.bo'),
+('Emergencias', 'Fugas de gas, inundaciones y riesgos inmediatos', '222-1241', 'emergencias@municipio.bo');
+
+
+-- ====================== INSERTAR DATOS EN CATEGORIAS (CON SUBCONSULTAS) ======================
+
+INSERT INTO categorias (nombre, descripcion, prioridad_base, area_id) VALUES
+
+-- Servicios Basicos
+('Falta de agua', 'Sin suministro de agua potable en la zona', 1, (SELECT id_area FROM areas WHERE nombre = 'Servicios Basicos')),
+('Alcantarillado colapsado', 'Aguas servidas saliendo a la calle', 1, (SELECT id_area FROM areas WHERE nombre = 'Servicios Basicos')),
+('Tuberia rota', 'Fuga de agua en la via publica', 1, (SELECT id_area FROM areas WHERE nombre = 'Servicios Basicos')),
+
+-- Alumbrado Publico
+('Luminaria quemada', 'Farola que no enciende', 2, (SELECT id_area FROM areas WHERE nombre = 'Alumbrado Publico')),
+('Poste caido', 'Poste de luz en el suelo (riesgo)', 1, (SELECT id_area FROM areas WHERE nombre = 'Alumbrado Publico')),
+('Cable expuesto', 'Cable electrico suelto o colgando', 1, (SELECT id_area FROM areas WHERE nombre = 'Alumbrado Publico')),
+
+-- Vias y Transporte
+('Bache profundo', 'Hueco en la calle que daña vehiculos', 2, (SELECT id_area FROM areas WHERE nombre = 'Vias y Transporte')),
+('Calle sin pavimento', 'Tierra o ripio, no esta asfaltada', 3, (SELECT id_area FROM areas WHERE nombre = 'Vias y Transporte')),
+('Hundimiento de calle', 'La calle se esta hundiendo', 1, (SELECT id_area FROM areas WHERE nombre = 'Vias y Transporte')),
+
+-- Aseo Urbano
+('Basura acumulada', 'Microbasural en la via publica', 2, (SELECT id_area FROM areas WHERE nombre = 'Aseo Urbano')),
+('Contenedor lleno', 'Contenedor de basura rebalsado', 3, (SELECT id_area FROM areas WHERE nombre = 'Aseo Urbano')),
+('Escombros en calle', 'Material de construccion abandonado', 2, (SELECT id_area FROM areas WHERE nombre = 'Aseo Urbano')),
+
+-- Areas Verdes
+('Arbol caido', 'Arbol obstruyendo la via', 1, (SELECT id_area FROM areas WHERE nombre = 'Areas Verdes')),
+('Parque descuidado', 'Falta mantenimiento en plaza', 3, (SELECT id_area FROM areas WHERE nombre = 'Areas Verdes')),
+('Poda necesaria', 'Ramas muy largas o peligrosas', 3, (SELECT id_area FROM areas WHERE nombre = 'Areas Verdes')),
+
+-- Transito
+('Semaforo dañado', 'Semaforo no funciona (riesgo de accidente)', 1, (SELECT id_area FROM areas WHERE nombre = 'Transito')),
+('Señal caida', 'Señal de transito en el suelo', 2, (SELECT id_area FROM areas WHERE nombre = 'Transito')),
+('Falta de señalizacion', 'Cruce peligroso sin señal', 3, (SELECT id_area FROM areas WHERE nombre = 'Transito')),
+
+-- Control Urbano
+('Vendedores ambulantes', 'Comercio informal en via publica', 2, (SELECT id_area FROM areas WHERE nombre = 'Control Urbano')),
+('Construccion ilegal', 'Obra sin permiso municipal', 2, (SELECT id_area FROM areas WHERE nombre = 'Control Urbano')),
+('Ruidos molestos', 'Vecino con musica muy alta', 3, (SELECT id_area FROM areas WHERE nombre = 'Control Urbano')),
+
+-- Emergencias
+('Fuga de gas', 'Olor o fuga de gas natural', 1, (SELECT id_area FROM areas WHERE nombre = 'Emergencias')),
+('Inundacion', 'Calle anegada por lluvia', 1, (SELECT id_area FROM areas WHERE nombre = 'Emergencias')),
+('Riesgo de derrumbe', 'Pared o cerco a punto de caer', 1, (SELECT id_area FROM areas WHERE nombre = 'Emergencias'));
