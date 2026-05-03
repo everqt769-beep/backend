@@ -56,7 +56,7 @@ const getUsuarioById = async (req, res, next) => {
             .from('usuarios')
             .select('*, areas(*), estados(*)')
             .eq('id_usuario', id)
-            .single();
+            .maybeSingle();;
 
         if (error) throw error;
         if (!data) return res.status(404).json({ error: 'Usuario no encontrado' });
