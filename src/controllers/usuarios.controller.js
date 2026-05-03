@@ -28,7 +28,7 @@ const updatePerfil = async (req, res, next) => {
             .update(updates)
             .eq('id_usuario', id)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
         res.json(data);
@@ -77,7 +77,7 @@ const updateUsuario = async (req, res, next) => {
             .update({ nombre, correo, rol, area_id, telefono, estado_id })
             .eq('id_usuario', id)
             .select('*, areas(*), estados(*)')
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
         if (!data) return res.status(404).json({ error: 'Usuario no encontrado' });
