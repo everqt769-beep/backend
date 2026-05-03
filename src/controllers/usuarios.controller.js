@@ -4,7 +4,7 @@ const { supabase, supabaseAdmin } = require('../config/supabase');
 const getPerfil = async (req, res, next) => {
     try {
         const { id } = req.user;
-        const { data, error } = await supabase.from('usuarios').select('*, areas(*), estados(*)').eq('id_usuario', id).single();
+        const { data, error } = await supabase.from('usuarios').select('*, areas(*), estados(*)').eq('id_usuario', id).maybeSingle();
         if (error) throw error;
         res.json(data);
     } catch (err) {
