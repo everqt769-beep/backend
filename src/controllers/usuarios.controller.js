@@ -120,12 +120,13 @@ const createUsuario = async (req, res, next) => {
             });
 
         if (authError) throw authError;
-
+        const userId = authData.user.id;
         // Insertar en tabla usuarios
         const { data, error } = await supabase
             .from('usuarios')
             .insert([
                 {
+                    id_usuario: userId,
                     nombre: nombre,
                     correo: email,
                     rol: rol,
