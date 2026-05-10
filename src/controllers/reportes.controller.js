@@ -3,18 +3,34 @@ const { supabase } = require('../config/supabase');
 // Obtener todos los reportes
 const getReportes = async (req, res, next) => {
     try {
-        const { data, error } = await supabase
+
+        let query = supabase
             .from('reportes')
             .select(`
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
                 estados(nombre, color)
-            `)
+            `);
+
+        // Aplicar filtro por usuario si existe
+        if (req.query.usuario_id) {
+
+            // Convierte:
+            // eq.uuid
+            // -> uuid
+            const usuarioId = req.query.usuario_id.replace('eq.', '');
+
+            query = query.eq('usuario_id', usuarioId);
+        }
+
+        const { data, error } = await query
             .order('fecha_creacion', { ascending: false });
 
         if (error) throw error;
+
         res.json(data);
+
     } catch (err) {
         next(err);
     }
