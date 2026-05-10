@@ -98,7 +98,20 @@ const createUsuario = async (req, res, next) => {
             });
         }
 
-        // Crear usuario en Supabase Auth
+        // Verificar si ya existe en tabla usuarios
+        const { data: usuarioExistente } = await supabase
+            .from('usuarios')
+            .select('id_usuario')
+            .eq('correo', email)
+            .maybeSingle();
+
+        if (usuarioExistente) {
+            return res.status(400).json({
+                error: 'El correo ya está registrado'
+            });
+        }
+
+        // Crear usuario en Auth
         const { data: authData, error: authError } =
             await supabaseAdmin.auth.admin.createUser({
                 email,
@@ -110,7 +123,7 @@ const createUsuario = async (req, res, next) => {
 
         const userId = authData.user.id;
 
-        // Guardar en tabla usuarios
+        // Insertar en tabla usuarios
         const { data, error } = await supabase
             .from('usuarios')
             .insert([
@@ -124,7 +137,11 @@ const createUsuario = async (req, res, next) => {
             .select()
             .single();
 
-        if (error) throw error;
+        // Si falla insert -> eliminar usuario auth
+        if (error) {
+            await supabaseAdmin.auth.admin.deleteUser(userId);
+            throw error;
+        }
 
         res.status(201).json(data);
 
@@ -132,7 +149,6 @@ const createUsuario = async (req, res, next) => {
         next(err);
     }
 };
-
 // Eliminar un usuario (admin)
 const deleteUsuario = async (req, res, next) => {
     try {
