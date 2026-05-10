@@ -159,6 +159,7 @@ const createUsuario = async (req, res, next) => {
 
     return res.status(201).json(data);
   } catch (err) {
+    console.log('ERROR REAL:', err.code, err.message, err.details);
     next(err);
   }
 };
