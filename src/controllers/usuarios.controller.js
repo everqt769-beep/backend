@@ -88,64 +88,79 @@ const updateUsuario = async (req, res, next) => {
 };
 
 // Crear usuario (admin)
+
+
 const createUsuario = async (req, res, next) => {
-    try {
-        const { nombre, email, password, rol } = req.body;
+  try {
+    const { nombre, email, password, rol } = req.body;
 
-        if (!nombre || !email || !password || !rol) {
-            return res.status(400).json({
-                error: 'Todos los campos son obligatorios'
-            });
-        }
-
-        // Verificar si ya existe en tabla usuarios
-        const { data: usuarioExistente } = await supabase
-            .from('usuarios')
-            .select('id_usuario')
-            .eq('correo', email)
-            .maybeSingle();
-
-        if (usuarioExistente) {
-            return res.status(400).json({
-                error: 'El correo ya está registrado'
-            });
-        }
-
-        // Crear usuario en Auth
-        const { data: authData, error: authError } =
-            await supabaseAdmin.auth.admin.createUser({
-                email,
-                password,
-                email_confirm: true,
-            });
-
-        if (authError) throw authError;
-        const userId = authData.user.id;
-        // Insertar en tabla usuarios
-        const { data, error } = await supabase
-            .from('usuarios')
-            .insert([
-                {
-                    id_usuario: userId,
-                    nombre: nombre,
-                    correo: email,
-                    rol: rol,
-                }
-            ])
-            .select()
-            .single();
-
-        // Si falla insert -> eliminar usuario auth
-        if (error) {
-            await supabaseAdmin.auth.admin.deleteUser(userId);
-            throw error;
-        }
-
-        res.status(201).json(data);
-
-    } catch (err) {
-        next(err);
+    if (!nombre || !email || !password || !rol) {
+      return res.status(400).json({
+        error: 'Todos los campos son obligatorios',
+      });
     }
+
+    const correo = email.trim().toLowerCase();
+
+    // 1) Verificar si ya existe el correo en la tabla usuarios
+    const { data: usuarioExistente, error: existeError } = await supabase
+      .from('usuarios')
+      .select('id_usuario, correo')
+      .eq('correo', correo)
+      .maybeSingle();
+
+    if (existeError) throw existeError;
+
+    if (usuarioExistente) {
+      return res.status(409).json({
+        error: 'El correo ya está registrado',
+      });
+    }
+
+    // 2) Crear usuario en Auth
+    const { data: authData, error: authError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: correo,
+        password,
+        email_confirm: true,
+      });
+
+    if (authError) throw authError;
+
+    const userId = authData.user.id;
+
+    // 3) Insertar en la tabla usuarios
+    const { data, error } = await supabaseAdmin
+      .from('usuarios')
+      .insert([
+        {
+          id_usuario: userId,
+          nombre,
+          correo,
+          rol,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      // Si falla la tabla, eliminar el usuario de Auth
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+
+      // Manejo específico de duplicado
+      if (error.code === '23505') {
+        return res.status(409).json({
+          error: 'Ya existe un usuario con esa clave primaria o correo',
+        });
+      }
+
+      throw error;
+    }
+
+    return res.status(201).json(data);
+  } catch (err) {
+    next(err);
+  }
 };
 // Eliminar un usuario (admin)
 const deleteUsuario = async (req, res, next) => {
