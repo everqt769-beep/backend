@@ -90,9 +90,9 @@ const updateUsuario = async (req, res, next) => {
 // Crear usuario (admin)
 const createUsuario = async (req, res, next) => {
     try {
-        const { nombre_completo, email, password, rol } = req.body;
+        const { nombre, email, password, rol } = req.body;
 
-        if (!nombre_completo || !email || !password || !rol) {
+        if (!nombre || !email || !password || !rol) {
             return res.status(400).json({
                 error: 'Todos los campos son obligatorios'
             });
@@ -129,7 +129,7 @@ const createUsuario = async (req, res, next) => {
             .insert([
                 {
                     id_usuario: userId,
-                    nombre: nombre_completo,
+                    nombre: nombre,
                     correo: email,
                     rol: rol,
                 }
