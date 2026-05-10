@@ -87,6 +87,52 @@ const updateUsuario = async (req, res, next) => {
     }
 };
 
+// Crear usuario (admin)
+const createUsuario = async (req, res, next) => {
+    try {
+        const { nombre_completo, email, password, rol } = req.body;
+
+        if (!nombre_completo || !email || !password || !rol) {
+            return res.status(400).json({
+                error: 'Todos los campos son obligatorios'
+            });
+        }
+
+        // Crear usuario en Supabase Auth
+        const { data: authData, error: authError } =
+            await supabaseAdmin.auth.admin.createUser({
+                email,
+                password,
+                email_confirm: true,
+            });
+
+        if (authError) throw authError;
+
+        const userId = authData.user.id;
+
+        // Guardar en tabla usuarios
+        const { data, error } = await supabase
+            .from('usuarios')
+            .insert([
+                {
+                    id_usuario: userId,
+                    nombre: nombre_completo,
+                    correo: email,
+                    rol: rol,
+                }
+            ])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json(data);
+
+    } catch (err) {
+        next(err);
+    }
+};
+
 // Eliminar un usuario (admin)
 const deleteUsuario = async (req, res, next) => {
     try {
@@ -111,5 +157,6 @@ module.exports = {
     getAllUsuarios,
     getUsuarioById,
     updateUsuario,
-    deleteUsuario
+    deleteUsuario,
+    createUsuario
 };
