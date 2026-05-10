@@ -88,21 +88,17 @@ const updateUsuario = async (req, res, next) => {
 };
 
 // Crear usuario (admin)
-
-
 const createUsuario = async (req, res, next) => {
   try {
     const { nombre, email, password, rol } = req.body;
 
     if (!nombre || !email || !password || !rol) {
-      return res.status(400).json({
-        error: 'Todos los campos son obligatorios',
-      });
+      return res.status(400).json({ error: 'Todos los campos son obligatorios' });
     }
 
     const correo = email.trim().toLowerCase();
 
-    // 1) Verificar si ya existe el correo en la tabla usuarios
+    // 1) Verificar correo duplicado
     const { data: usuarioExistente, error: existeError } = await supabase
       .from('usuarios')
       .select('id_usuario, correo')
@@ -110,14 +106,11 @@ const createUsuario = async (req, res, next) => {
       .maybeSingle();
 
     if (existeError) throw existeError;
-
     if (usuarioExistente) {
-      return res.status(409).json({
-        error: 'El correo ya está registrado',
-      });
+      return res.status(409).json({ error: 'El correo ya está registrado' });
     }
 
-    // 2) Crear usuario en Auth
+    // 2) Crear en Auth → el trigger handle_new_user() inserta automáticamente en usuarios
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.admin.createUser({
         email: correo,
@@ -129,40 +122,29 @@ const createUsuario = async (req, res, next) => {
 
     const userId = authData.user.id;
 
-    // 3) Insertar en la tabla usuarios
+    // 3) El trigger ya creó la fila. Solo actualizamos nombre y rol
+    //    (el trigger probablemente insertó rol='ciudadano' y nombre vacío)
     const { data, error } = await supabaseAdmin
       .from('usuarios')
-      .upsert([
-        {
-          id_usuario: userId,
-          nombre,
-          correo,
-          rol,
-        },
-      ],{ onConflict: 'id_usuario' } )
+      .update({ nombre, correo, rol })
+      .eq('id_usuario', userId)
       .select()
       .single();
 
     if (error) {
-      // Si falla la tabla, eliminar el usuario de Auth
+      // Rollback: eliminar de Auth si falla la actualización
       await supabaseAdmin.auth.admin.deleteUser(userId);
-
-      // Manejo específico de duplicado
-      if (error.code === '23505') {
-        return res.status(409).json({
-          error: 'Ya existe un usuario con esa clave primaria o correo',
-        });
-      }
-
       throw error;
     }
 
     return res.status(201).json(data);
+
   } catch (err) {
-    console.log('ERROR REAL:', err.code, err.message, err.details);
+    console.log('[createUsuario] ERROR:', err.code, err.message, err.details);
     next(err);
   }
 };
+
 // Eliminar un usuario (admin)
 const deleteUsuario = async (req, res, next) => {
     try {
