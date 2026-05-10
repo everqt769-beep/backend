@@ -132,14 +132,14 @@ const createUsuario = async (req, res, next) => {
     // 3) Insertar en la tabla usuarios
     const { data, error } = await supabaseAdmin
       .from('usuarios')
-      .insert([
+      .upsert([
         {
           id_usuario: userId,
           nombre,
           correo,
           rol,
         },
-      ])
+      ],{ onConflict: 'id_usuario' } )
       .select()
       .single();
 
