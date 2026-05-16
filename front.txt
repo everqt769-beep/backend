@@ -35,21 +35,25 @@ class _HistorialIAScreenState extends State<HistorialIAScreen> {
       appBar: AppBar(
         title: const Text('Historial de Análisis IA'),
         backgroundColor: AppColors.surface.withOpacity(0.9),
+        elevation: 1,
       ),
       body: provider.isLoading
           ? const LoadingWidget(message: 'Cargando historial...')
           : historial.isEmpty
               ? const EmptyStateWidget(
                   title: 'No hay registros de cambios por IA todavía.',
-                  subtitle: 'Intenta generar un nuevo análisis para ver resultados.',
+                  subtitle: 'Cuando la IA modifique un reporte, su estado original aparecerá aquí.',
                   icon: Icons.history_toggle_off,
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: historial.length,
-                  itemBuilder: (context, index) {
-                    return HistorialCard(item: historial[index]);
-                  },
+              : RefreshIndicator(
+                  onRefresh: () => provider.fetchHistorialAnalisis(),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: historial.length,
+                    itemBuilder: (context, index) {
+                      return HistorialCard(item: historial[index]);
+                    },
+                  ),
                 ),
     );
   }
@@ -62,51 +66,68 @@ class HistorialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final shortId = item.reporteId.split('-').first;
+    final shortId = item.reporteId.split('-').first.toUpperCase();
 
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reporte #$shortId',
-              style: textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Análisis del ${DateFormat('dd/MM/yyyy HH:mm').format(item.fechaModificacion)}',
-              style: textTheme.bodySmall?.copyWith(color: AppColors.textHint),
-            ),
-            const Divider(height: 20, thickness: 1),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildChangeColumn(
-                  context,
-                  title: 'Antes del Análisis',
-                  categoria: item.categoriaOriginal.nombre,
-                  estado: item.estadoOriginal.nombre,
-                  isOriginal: true,
+                 Text(
+                  'REPORTE #$shortId',
+                  style: textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-                const Icon(Icons.arrow_forward_rounded, color: AppColors.pendiente, size: 28),
-                _buildChangeColumn(
-                  context,
-                  title: 'Sugerencia de IA',
-                  categoria: item.reporteActual.nombreCategoria,
-                  estado: item.reporteActual.nombreEstado,
+                const SizedBox(height: 4),
+                Text(
+                  'Análisis realizado el ${DateFormat('dd/MM/yyyy HH:mm').format(item.fechaModificacion)}Hs',
+                  style: textTheme.bodySmall?.copyWith(color: AppColors.textHint),
                 ),
               ],
-            )
-          ],
-        ),
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: _buildChangeColumn(
+                      context,
+                      title: 'Estado Original',
+                      categoria: item.categoriaOriginal.nombre,
+                      estado: item.estadoOriginal,
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Icon(Icons.arrow_forward_rounded, color: AppColors.primary, size: 28),
+                  ),
+                  Expanded(
+                    child: _buildChangeColumn(
+                      context,
+                      title: 'Cambio Aplicado',
+                      categoria: item.reporteActual.categoria.nombre,
+                      estado: item.reporteActual.estado,
+                    ),
+                  ),
+                ],
+              ),
+          )
+        ],
       ),
     );
   }
@@ -114,446 +135,253 @@ class HistorialCard extends StatelessWidget {
   Widget _buildChangeColumn(BuildContext context, { 
     required String title,
     required String categoria,
-    required String estado,
-    bool isOriginal = false,
+    required EstadoHistorial estado,
   }) {
     final textTheme = Theme.of(context).textTheme;
-    final titleStyle = textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.bold, 
-      color: isOriginal ? AppColors.textSecondary : AppColors.secondaryLight
-    );
+    final titleStyle = textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold);
     final valueStyle = textTheme.bodyMedium;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: titleStyle),
-        const SizedBox(height: 8),
-        Text('Categoría:', style: valueStyle?.copyWith(color: AppColors.textHint)),
-        Text(categoria, style: valueStyle),
-        const SizedBox(height: 6),
-        Text('Estado:', style: valueStyle?.copyWith(color: AppColors.textHint)),
-        Text(estado, style: valueStyle),
+        const SizedBox(height: 12),
+        Text('CATEGORÍA', style: textTheme.labelSmall?.copyWith(color: AppColors.textHint)),
+        Text(categoria, style: valueStyle?.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 10),
+        Text('ESTADO', style: textTheme.labelSmall?.copyWith(color: AppColors.textHint)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: estado.color.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: estado.color, width: 1.5)
+          ),
+          child: Text(
+            estado.nombre.toUpperCase(),
+            style: textTheme.labelSmall?.copyWith(
+              color: estado.color,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
-reportes_provider.dart:
 
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:myapp/src/models/analisis_ia.dart';
 
-import '../core/constants/api_constants.dart';
-import '../core/services/api_service.dart';
-import '../models/analisis_ia.dart';
-import '../models/asignacion.dart';
-import '../models/reporte.dart';
-import '../models/reporte_historial.dart';
-import '../models/usuario_simple.dart';
 
-/// Provider para la gestión de reportes y asignaciones.
-class ReportesProvider extends ChangeNotifier {
-  final ApiService _api = ApiService();
+class AnalisisIACard extends StatelessWidget {
+  final AnalisisIA analisis;
 
-  // --- ESTADO ---
-  List<Reporte> _reportes = [];
-  Reporte? _reporteDetalle;
-  List<Asignacion> _asignaciones = [];
-  List<UsuarioSimple> _funcionarios = [];
-  List<ReporteHistorial> _historial = [];
-  AnalisisIA? _analisisIA;
+  const AnalisisIACard({super.key, required this.analisis});
 
-  bool _isLoading = false;
-  String? _error;
-  String? _filtroEstado;
-  String? _filtroArea;
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final esValidoColor = analisis.esValido ? Colors.green[700] : Colors.red[700];
 
-  // --- GETTERS ---
-  Reporte? get reporteDetalle => _reporteDetalle;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String? get filtroEstado => _filtroEstado;
-  String? get filtroArea => _filtroArea;
-  List<Asignacion> get asignaciones => _asignaciones;
-  List<UsuarioSimple> get funcionarios => _funcionarios;
-  List<ReporteHistorial> get historial => _historial;
-  AnalisisIA? get analisisIA => _analisisIA;
-
-  List<Reporte> get reportes {
-    var lista = List<Reporte>.from(_reportes);
-    if (_filtroEstado != null && _filtroEstado!.isNotEmpty) {
-      lista = lista.where((r) => r.codigoEstado == _filtroEstado).toList();
-    }
-    if (_filtroArea != null && _filtroArea!.isNotEmpty) {
-      lista = lista
-          .where((r) => r.categoria?.area?.nombre == _filtroArea)
-          .toList();
-    }
-    return lista;
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Análisis de IA',
+                  style: textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                Icon(
+                  Icons.auto_awesome,
+                  color: colorScheme.primary,
+                )
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildInfoRow(
+              context,
+              icon: analisis.esValido ? Icons.check_circle : Icons.cancel,
+              label: 'Veredicto',
+              value: analisis.esValido ? 'Reporte Válido' : 'Reporte Inválido',
+              valueColor: esValidoColor,
+            ),
+            const Divider(height: 24),
+            _buildInfoRow(
+              context,
+              icon: Icons.priority_high,
+              label: 'Prioridad Sugerida',
+              value: analisis.prioridad.toUpperCase(),
+              valueColor: _getPrioridadColor(analisis.prioridad),
+            ),
+            const Divider(height: 24),
+            _buildInfoRow(
+              context,
+              icon: Icons.category,
+              label: 'Categoría Sugerida',
+              value: analisis.categoriaSugerida,
+            ),
+            if (analisis.justificacion != null &&
+                analisis.justificacion!.isNotEmpty) ...[
+              const Divider(height: 24),
+              _buildJustificacion(context),
+            ],
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Text(
+                'Análisis realizado el ${DateFormat('dd/MM/yyyy HH:mm').format(analisis.createdAt)}',
+                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
   }
 
-  int get totalReportes => _reportes.length;
-  List<Reporte> get reportesConUbicacion =>
-      reportes.where((r) => r.latitud != null && r.longitud != null).toList();
+  Widget _buildInfoRow(BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
-  // --- MÉTODOS ---
-
-  // ─────────────────────────────────────────────
-  // REPORTES
-  // ─────────────────────────────────────────────
-  Future<void> fetchReportes() async {
-    _setLoading(true);
-    _error = null;
-    try {
-      final result = await _api.get(ApiConstants.reportes);
-      _reportes = (result as List)
-          .map((json) => Reporte.fromJson(json))
-          .toList();
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _setLoading(false);
-    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: colorScheme.secondary, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: valueColor ?? colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  Future<void> fetchMisReportes() async {
-    debugPrint('--- [ReportesProvider] ---');
-    debugPrint('▶️ Iniciando fetchMisReportes...');
-    _setLoading(true);
-    _error = null;
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        debugPrint('🛑 ERROR: Usuario no autenticado.');
-        throw Exception('Usuario no autenticado.');
-      }
-      debugPrint('👤 ID de usuario para filtrar: $userId');
-      final urlConFiltro = '${ApiConstants.reportes}?usuario_id=eq.$userId';
-      debugPrint('🔗 URL que se enviará a la API: $urlConFiltro');
-      final result = await _api.get(urlConFiltro);
-      if (result is List) {
-        debugPrint('✅ API respondió con ${result.length} reportes.');
-        _reportes = (result).map((json) => Reporte.fromJson(json)).toList();
-      } else {
-        debugPrint('⚠️ ADVERTENCIA: La API no devolvió una lista.');
-        _reportes = [];
-      }
-    } catch (e, stackTrace) {
-      debugPrint('🔥 Error en fetchMisReportes: $e');
-      debugPrint('   Stacktrace: $stackTrace');
-      _error = e.toString();
-    } finally {
-      _setLoading(false);
-      debugPrint('⏹️ Finalizado fetchMisReportes.');
-      debugPrint('--------------------------');
-    }
+  Widget _buildJustificacion(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.lightbulb_outline, color: colorScheme.secondary, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Justificación de la IA',
+                 style: textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.outline.withOpacity(0.2))
+                ),
+                child: Text(
+                  analisis.justificacion!,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  Future<void> fetchReporteDetalle(String id) async {
-    _setLoading(true);
-    _error = null;
-    try {
-      final result = await _api.get('${ApiConstants.reportes}/$id');
-      _reporteDetalle = Reporte.fromJson(result);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<Reporte?> crearReporte({
-    required String categoriaId,
-    required String descripcion,
-    double? latitud,
-    double? longitud,
-    String? direccion,
-  }) async {
-    _setLoading(true);
-    _error = null;
-    try {
-      final body = {
-        'categoria_id': categoriaId,
-        'descripcion': descripcion,
-        if (latitud != null) 'latitud': latitud,
-        if (longitud != null) 'longitud': longitud,
-        if (direccion != null) 'direccion': direccion,
-      };
-      final result = await _api.post(ApiConstants.reportes, body);
-      final nuevoReporte = Reporte.fromJson(result);
-      _reportes.insert(0, nuevoReporte);
-      return nuevoReporte;
-    } catch (e) {
-      _error = e.toString();
-      return null;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<bool> cambiarEstado({
-    required String reporteId,
-    required String estadoCodigo,
-    String? descripcionSeguimiento,
-  }) async {
-    // No usamos setLoading para que la UI no parpadee
-    try {
-      await _api.patch('${ApiConstants.reportes}/$reporteId/estado', {
-        'estado_codigo': estadoCodigo,
-        if (descripcionSeguimiento != null)
-          'descripcion_seguimiento': descripcionSeguimiento,
-      });
-      await fetchReportes();
-      if (_reporteDetalle?.idReporte == reporteId) {
-        await fetchReporteDetalle(reporteId);
-      }
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // INTELIGENCIA ARTIFICIAL (NUEVO)
-  // ─────────────────────────────────────────────
-
-  /// Llama al endpoint para que la IA analice un reporte.
-  Future<AnalisisIA?> analizarReporte(String reporteId) async {
-    _setLoading(true);
-    _error = null;
-    try {
-      final url = '${ApiConstants.reportes}/$reporteId/analizar';
-      final result = await _api.post(url, {});
-
-      _analisisIA = AnalisisIA.fromJson(result);
-
-      // Después de analizar, actualizamos el detalle para reflejar cambios
-      await fetchReporteDetalle(reporteId.toString());
-
-      return _analisisIA;
-    } catch (e) {
-      _error = e.toString();
-      return null;
-    } finally {
-      _setLoading(false);
+  Color _getPrioridadColor(String prioridad) {
+    switch (prioridad.toLowerCase()) {
+      case 'alta':
+        return Colors.orange.shade800;
+      case 'media':
+        return Colors.amber.shade700;
+      case 'baja':
+        return Colors.blue.shade600;
+      default:
+        return Colors.grey;
     }
   }
+}
 
-  /// Recupera el historial de cambios de la IA.
-  Future<void> fetchHistorialAnalisis() async {
-    debugPrint('--- [ReportesProvider] ---');
-    debugPrint('▶️ Iniciando fetchHistorialAnalisis...');
-    _setLoading(true);
-    _error = null;
-    try {
-      final result = await _api.get(ApiConstants.reportesHistorial);
-      debugPrint('✅ API respondió con los siguientes datos para el historial:');
-      debugPrint(result.toString()); // Log para ver la data cruda
 
-      if (result is List) {
-        _historial = (result)
-            .map((json) => ReporteHistorial.fromJson(json))
-            .toList();
-        debugPrint(
-          '✅ Se procesaron ${_historial.length} registros de historial.',
-        );
-      } else {
-        debugPrint(
-          '⚠️ ADVERTENCIA: La API no devolvió una lista para el historial.',
-        );
-        _historial = [];
-      }
-    } catch (e, stackTrace) {
-      debugPrint('🔥 Error en fetchHistorialAnalisis: $e');
-      debugPrint('   Stacktrace: $stackTrace');
-      _error = e.toString();
-    } finally {
-      _setLoading(false);
-      debugPrint('⏹️ Finalizado fetchHistorialAnalisis.');
-      debugPrint('--------------------------');
-    }
-  }
 
-  // ─────────────────────────────────────────────
-  // ASIGNACIONES (NUEVO)
-  // ─────────────────────────────────────────────
+class AnalisisIA {
+  final int? id;
+  final int? reporteId;
+  final bool esValido;
+  final String prioridad;
+  final String categoriaSugerida;
+  final String? justificacion;
+  final DateTime createdAt;
 
-  /// Carga la lista de todas las asignaciones (para el admin).
-  Future<void> fetchAsignaciones() async {
-    _setLoading(true);
-    _error = null;
-    try {
-      // El endpoint de asignaciones debe estar en ApiConstants
-      final result = await _api.get(ApiConstants.asignaciones);
-      _asignaciones = (result as List)
-          .map((json) => Asignacion.fromJson(json))
-          .toList();
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _setLoading(false);
-    }
-  }
+  AnalisisIA({
+    this.id,
+    this.reporteId,
+    required this.esValido,
+    required this.prioridad,
+    required this.categoriaSugerida,
+    this.justificacion,
+    required this.createdAt,
+  });
 
-  /// Carga la lista de usuarios con rol de funcionario.
-  /// Carga la lista de usuarios con rol funcionario/admin.
-  Future<void> fetchFuncionarios() async {
-    _setLoading(true);
-    _error = null;
-
-    try {
-      final result = await _api.get(ApiConstants.usuarios);
-
-      debugPrint('USUARIOS CARGADOS: ${result.length}');
-      debugPrint(result.toString());
-
-      final usuarios = (result as List)
-          .map((json) => UsuarioSimple.fromJson(json))
-          .toList();
-
-      // DEBUG
-      for (final f in usuarios) {
-        debugPrint('USUARIO: ${f.nombre} | ROL: ${f.rol}');
-      }
-
-      _funcionarios = usuarios.where((u) {
-        final rol = u.rol?.toLowerCase() ?? '';
-
-        return rol.contains('funcionario') || rol.contains('admin');
-      }).toList();
-
-      debugPrint('FUNCIONARIOS FILTRADOS: ${_funcionarios.length}');
-    } catch (e) {
-      debugPrint('ERROR fetchFuncionarios: $e');
-
-      _error = e.toString();
-      _funcionarios = [];
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Crea una nueva asignación y actualiza el estado del reporte.
-  Future<bool> crearAsignacion({
-    required String reporteId,
-    required String funcionarioId,
-  }) async {
-    _setLoading(true);
-    _error = null;
-    try {
-      await _api.post(ApiConstants.asignaciones, {
-        'reporte_id': reporteId,
-        'funcionario_id': funcionarioId,
-      });
-
-      // Refrescamos los datos para que la UI se actualice
-      await fetchReporteDetalle(reporteId);
-      // Opcional: refrescar la lista general de asignaciones
-      // await fetchAsignaciones();
-
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // COMENTARIOS Y ADJUNTOS
-  // ─────────────────────────────────────────────
-  Future<bool> agregarComentario({
-    required String reporteId,
-    required String texto,
-    String tipo = 'publico',
-    String? padreId,
-  }) async {
-    try {
-      await _api.post(ApiConstants.comentarios, {
-        'reporte_id': reporteId,
-        'texto': texto,
-        'tipo': tipo,
-        if (padreId != null) 'padre_id': padreId,
-      });
-      if (_reporteDetalle?.idReporte == reporteId) {
-        await fetchReporteDetalle(reporteId);
-      }
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> registrarAdjunto({
-    required String reporteId,
-    required String tipo,
-    required String url,
-    required String nombreArchivo,
-    int? tamanoBytes,
-    String? descripcion,
-  }) async {
-    try {
-      await _api.post(ApiConstants.adjuntos, {
-        'reporte_id': reporteId,
-        'tipo': tipo,
-        'url': url,
-        'nombre_archivo': nombreArchivo,
-        if (tamanoBytes != null) 'tamano_bytes': tamanoBytes,
-        if (descripcion != null) 'descripcion': descripcion,
-      });
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // UTILIDADES Y FILTROS
-  // ─────────────────────────────────────────────
-  void setFiltroEstado(String? estado) {
-    _filtroEstado = estado;
-    notifyListeners();
-  }
-
-  void setFiltroArea(String? area) {
-    _filtroArea = area;
-    notifyListeners();
-  }
-
-  void limpiarFiltros() {
-    _filtroEstado = null;
-    _filtroArea = null;
-    notifyListeners();
-  }
-
-  void limpiarDetalle() {
-    _reporteDetalle = null;
-  }
-
-  Map<String, int> get estadisticas {
-    final stats = <String, int>{};
-    for (final r in _reportes) {
-      stats[r.codigoEstado] = (stats[r.codigoEstado] ?? 0) + 1;
-    }
-    return stats;
-  }
-
-  void _setLoading(bool val) {
-    _isLoading = val;
-    notifyListeners();
-  }
-
-  void clearError() {
-    _error = null;
-    notifyListeners();
+  factory AnalisisIA.fromJson(Map<String, dynamic> json) {
+    return AnalisisIA(
+      id: json['id'] as int?,
+      reporteId: json['reporte_id'] as int?,
+      esValido: json['es_valido'] ?? false,
+      prioridad: json['prioridad'] ?? 'baja',
+      categoriaSugerida: json['categoria_sugerida'] ?? 'Desconocida',
+      justificacion: json['justificacion'] as String?,
+      createdAt: json['created_at'] != null 
+          ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
+          : DateTime.now(),
+    );
   }
 }

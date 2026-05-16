@@ -347,7 +347,12 @@ const getHistorialIA = async (req, res, next) => {
             .from('reportes_historial')
             .select(`
                 *,
-                reporte_actual:reportes(*, categorias(nombre), estados(nombre, color)),
+                reporte_actual:reportes(
+                    *,
+                    categorias(nombre),
+                    estados(nombre, color),
+                    analisis_ia(es_valido, prioridad, categoria_sugerida, justificacion, fecha_analisis)
+                ),
                 categoria_original:categorias(nombre),
                 estado_original:estados(nombre, color)
             `)
