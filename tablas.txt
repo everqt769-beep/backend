@@ -101,3 +101,23 @@ CREATE TABLE seguimiento (
     estado_nuevo_id UUID REFERENCES estados(id_estado),
     fecha TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 10. ANALISIS_IA
+CREATE TABLE analisis_ia (
+    id_analisis UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reporte_id UUID REFERENCES reportes(id_reporte) ON DELETE CASCADE UNIQUE,
+    es_valido BOOLEAN NOT NULL,
+    prioridad TEXT CHECK (prioridad IN ('alta', 'media', 'baja')),
+    categoria_sugerida TEXT,
+    justificacion TEXT,
+    fecha_analisis TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. REPORTES_HISTORIAL
+CREATE TABLE reportes_historial (
+    id_historial UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reporte_id UUID REFERENCES reportes(id_reporte) ON DELETE CASCADE,
+    categoria_id_original UUID REFERENCES categorias(id_categoria),
+    estado_id_original UUID REFERENCES estados(id_estado),
+    fecha_modificacion TIMESTAMPTZ DEFAULT NOW()
+);
