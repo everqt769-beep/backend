@@ -30,7 +30,7 @@ const getReportes = async (req, res, next) => {
 
         if (error) throw error;
 
-        res.json({ ...reporte, analisis_ia: data });
+        res.json(data);
 
     } catch (err) {
         next(err);
@@ -56,7 +56,7 @@ const getReporteById = async (req, res, next) => {
             .single();
 
         if (error) throw error;
-        res.json({ ...reporte, analisis_ia: data });
+        res.json(data);
     } catch (err) {
         next(err);
     }
@@ -148,7 +148,7 @@ const updateEstadoReporte = async (req, res, next) => {
             estado_nuevo_id: estado.id_estado
         }]);
 
-        res.json({ ...reporte, analisis_ia: data });
+        res.json(data);
     } catch (err) {
         next(err);
     }
@@ -174,7 +174,7 @@ const updateReporte = async (req, res, next) => {
 
         if (error) throw error;
         if (!data) return res.status(404).json({ error: 'Reporte no encontrado' });
-        res.json({ ...reporte, analisis_ia: data });
+        res.json(data);
     } catch (err) {
         next(err);
     }
@@ -267,7 +267,7 @@ const analizarReporteConIA = async (req, res, next) => {
             reporte.estado_id = nuevo_estado_id;
         }
 
-        // Intentamos guardar el análisis de IA en la tabla analisis_ia
+        // Guardar el análisis de IA en la tabla analisis_ia
         const { data, error: insertError } = await supabase
             .from('analisis_ia')
             .upsert({
@@ -281,12 +281,11 @@ const analizarReporteConIA = async (req, res, next) => {
             .single();
 
         if (insertError) {
-            console.warn("No se pudo guardar el análisis en BD. ¿Añadiste la columna 'ia_analisis' a la tabla 'reportes'? Error: ", insertError.message);
-            // Devolvemos el análisis de todas formas para que lo vea el admin, junto con una advertencia
+            console.warn("No se pudo guardar el análisis en la tabla 'analisis_ia'. ¿Ejecutaste ejecutar_en_supabase.sql? Error: ", insertError.message);
             return res.json({ 
                 ...reporte, 
                 analisis_ia: analisis, 
-                warning: "Análisis generado exitosamente pero no se guardó en BD. Por favor, crea la columna 'ia_analisis' de tipo JSONB en la tabla 'reportes' de Supabase." 
+                warning: "Análisis generado exitosamente pero no se guardó en BD. Por favor, ejecuta ejecutar_en_supabase.sql en Supabase." 
             });
         }
 

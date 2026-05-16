@@ -5,6 +5,11 @@ const { requireAuth, requireRole } = require('../middlewares/authMiddleware');
 
 // Rutas públicas (lectura)
 router.get('/', getReportes);
+
+// Ruta de admin (DEBE ir ANTES de /:id para que Express no confunda "historial-ia" con un UUID)
+router.get('/historial-ia', requireAuth, requireRole(['admin']), getHistorialIA);
+
+// Ruta pública por ID
 router.get('/:id', getReporteById);
 
 // Rutas autenticadas
@@ -13,7 +18,6 @@ router.post('/', createReporte);
 router.put('/:id', updateReporte);
 
 // Rutas de funcionario/admin
-router.get('/historial-ia', requireRole(['admin']), getHistorialIA);
 router.post('/:id/analizar', requireRole(['funcionario', 'admin']), analizarReporteConIA);
 router.patch('/:id/estado', requireRole(['funcionario', 'admin']), updateEstadoReporte);
 router.delete('/:id', requireRole(['admin']), deleteReporte);

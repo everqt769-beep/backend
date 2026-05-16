@@ -31,7 +31,6 @@ Se expusieron dos nuevos endpoints:
 - **Ruta:** `GET /reportes/historial-ia`
 - **Permisos:** Protegido mediante `requireRole(['admin'])`.
 - Permite consultar el historial de los reportes originales vs cómo quedaron tras ser cambiados por la Inteligencia Artificial. Exclusivo para administradores.
-- El ciudadano o "vecino" no tiene acceso para activar la IA en su propio reporte de manera manual.
 
 ### C. Controlador Principal (`src/controllers/reportes.controller.js`)
 El método `analizarReporteConIA` es el núcleo de este flujo. Sigue los siguientes pasos en orden:
