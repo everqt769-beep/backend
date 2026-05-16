@@ -11,8 +11,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 const analizarReporte = async (reporte, imagenesUrls = []) => {
     try {
-        // 1. CORRECCIÓN: Usar el nombre de modelo correcto para este SDK
-        const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+        // 1. CORRECCIÓN: Usamos gemini-1.5-flash, totalmente compatible con tu SDK
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         let prompt = `
 Eres un sistema de Inteligencia Artificial para el backend de una app de reportes vecinales.
@@ -40,6 +40,7 @@ Devuelve un objeto con la siguiente estructura:
                 const buffer = Buffer.from(arrayBuffer);
                 const mimeType = response.headers.get('content-type') || 'image/jpeg';
                 
+                // Formato 'Part' que requiere el SDK
                 imageParts.push({
                     inlineData: {
                         data: buffer.toString("base64"),
@@ -51,9 +52,15 @@ Devuelve un objeto con la siguiente estructura:
             }
         }
 
-        // 2. OPTIMIZACIÓN: Forzar a la API a responder en JSON estructurado nativo
+        // 2. CORRECCIÓN: Estructura estricta { role, parts } para evitar el error 400
         const result = await model.generateContent({
-            contents: [prompt, ...imageParts],
+            contents: [{
+                role: "user",
+                parts: [
+                    { text: prompt }, // El texto debe ir dentro de un objeto con la propiedad 'text'
+                    ...imageParts     // Las imágenes ya están estructuradas correctamente
+                ]
+            }],
             generationConfig: {
                 responseMimeType: "application/json"
             }
@@ -61,8 +68,7 @@ Devuelve un objeto con la siguiente estructura:
 
         const responseText = result.response.text();
 
-        // Al usar responseMimeType, el texto ya viene como un JSON puro, 
-        // no hace falta hacerle .replace() de Markdown.
+        // Convertimos el JSON limpio directamente a objeto
         return JSON.parse(responseText);
 
     } catch (error) {
