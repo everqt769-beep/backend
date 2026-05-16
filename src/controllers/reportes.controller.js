@@ -197,6 +197,7 @@ const deleteReporte = async (req, res, next) => {
 };
 
 // Analizar un reporte usando IA (Gemini)
+// Analizar un reporte usando IA (Gemini)
 const analizarReporteConIA = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -247,20 +248,25 @@ const analizarReporteConIA = async (req, res, next) => {
 
         // Si hubo algún cambio, guardamos en historial y actualizamos el reporte original
         if (nuevo_estado_id !== reporte.estado_id || nueva_categoria_id !== reporte.categoria_id) {
-            // 1. Guardar historial
-            await supabase.from('reportes_historial').insert([{
+            
+            // Verificamos errores en la inserción del historial para que no tumbe el proceso
+            const { error: histError } = await supabase.from('reportes_historial').insert([{
                 reporte_id: id,
                 categoria_id_original: reporte.categoria_id,
                 estado_id_original: reporte.estado_id
             }]);
+            
+            if (histError) console.error("Error al guardar historial:", histError.message);
 
-            // 2. Actualizar reporte original
-            await supabase.from('reportes')
+            // Actualizar reporte original
+            const { error: updateError } = await supabase.from('reportes')
                 .update({ 
                     categoria_id: nueva_categoria_id, 
                     estado_id: nuevo_estado_id 
                 })
                 .eq('id_reporte', id);
+                
+            if (updateError) throw updateError;
                 
             // Actualizar el objeto reporte local para la respuesta
             reporte.categoria_id = nueva_categoria_id;
@@ -275,27 +281,33 @@ const analizarReporteConIA = async (req, res, next) => {
                 es_valido: analisis.es_valido,
                 prioridad: analisis.prioridad,
                 categoria_sugerida: analisis.categoria_sugerida,
-                justificacion: analisis.justificacion
+                justificacion: analisis.justificacion || "Procesado por IA"
             }, { onConflict: 'reporte_id' })
             .select()
             .single();
 
         if (insertError) {
-            console.warn("No se pudo guardar el análisis en la tabla 'analisis_ia'. ¿Ejecutaste ejecutar_en_supabase.sql? Error: ", insertError.message);
+            console.warn("No se pudo guardar en 'analisis_ia': ", insertError.message);
             return res.json({ 
                 ...reporte, 
                 analisis_ia: analisis, 
-                warning: "Análisis generado exitosamente pero no se guardó en BD. Por favor, ejecuta ejecutar_en_supabase.sql en Supabase." 
+                warning: "Análisis exitoso pero no se pudo persistir en la tabla analisis_ia." 
             });
         }
 
         res.json({ ...reporte, analisis_ia: data });
 
     } catch (err) {
-        next(err);
+        // En lugar de pasar el error oculto a Express, lo imprimimos en Railway 
+        // y le respondemos a la App un JSON controlado para evitar que se caiga de golpe
+        console.error("🔴 ERROR CRÍTICO EN ANALIZAR_REPORTE:", err);
+        
+        res.status(500).json({ 
+            error: "Error interno en el servidor al analizar con IA",
+            message: err.message 
+        });
     }
 };
-
 // Obtener el historial de reportes modificados por la IA
 const getHistorialIA = async (req, res, next) => {
     try {
