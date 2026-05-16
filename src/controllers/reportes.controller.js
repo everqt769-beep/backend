@@ -197,17 +197,16 @@ const deleteReporte = async (req, res, next) => {
 };
 
 // Analizar un reporte usando IA (Gemini)
-// Analizar un reporte usando IA (Gemini)
 const analizarReporteConIA = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        // Obtener la descripción del reporte y las imágenes adjuntas
+        // Obtener el reporte completo con sus relaciones
         const { data: reporte, error: reporteError } = await supabase
             .from('reportes')
             .select(`
                 *,
-                categorias(nombre, areas(nombre)),
+                categorias(nombre, prioridad_base, areas(nombre)),
                 usuarios(nombre, rol),
                 adjuntos(url)
             `)
@@ -217,17 +216,22 @@ const analizarReporteConIA = async (req, res, next) => {
         if (reporteError) throw reporteError;
         if (!reporte) return res.status(404).json({ error: 'Reporte no encontrado' });
 
+        // Obtener TODAS las categorías existentes para pasárselas a la IA
+        const { data: categoriasExistentes } = await supabase
+            .from('categorias')
+            .select('id_categoria, nombre, prioridad_base, areas(nombre)');
+
         // Extraer URLs de los adjuntos para pasárselos a la IA
         const imagenesUrls = reporte.adjuntos ? reporte.adjuntos.map(adj => adj.url) : [];
 
-        // Llamar a Gemini a través de nuestro servicio
-        const analisis = await analizarReporte(reporte, imagenesUrls);
+        // Llamar a Gemini (ahora le pasamos las categorías existentes)
+        const analisis = await analizarReporte(reporte, imagenesUrls, categoriasExistentes || []);
 
         let nuevo_estado_id = reporte.estado_id;
         let nueva_categoria_id = reporte.categoria_id;
 
+        // CASO 1: Si la IA dice que es broma/falso → rechazar
         if (analisis.es_valido === false) {
-            // Buscar estado rechazado
             const { data: estadoData } = await supabase
                 .from('estados')
                 .select('id_estado')
@@ -235,39 +239,68 @@ const analizarReporteConIA = async (req, res, next) => {
                 .eq('codigo', 'rechazado')
                 .single();
             if (estadoData) nuevo_estado_id = estadoData.id_estado;
+
+        // CASO 2: Si la IA sugiere una categoría diferente
         } else if (analisis.categoria_sugerida && analisis.categoria_sugerida !== reporte.categorias?.nombre) {
-            // Buscar categoria sugerida
+
+            // Primero buscamos si ya existe esa categoría en la BD
             const { data: catData } = await supabase
                 .from('categorias')
                 .select('id_categoria')
-                .ilike('nombre', `%${analisis.categoria_sugerida}%`)
+                .ilike('nombre', analisis.categoria_sugerida)
                 .limit(1)
                 .single();
-            if (catData) nueva_categoria_id = catData.id_categoria;
+
+            if (catData) {
+                // La categoría existe, usamos su ID
+                nueva_categoria_id = catData.id_categoria;
+            } else {
+                // La categoría NO existe → la creamos automáticamente
+                // Mapeamos la prioridad texto a número: alta=1, media=2, baja=3
+                const mapPrioridad = { 'alta': 1, 'media': 2, 'baja': 3 };
+                const prioridadNum = mapPrioridad[analisis.prioridad] || 2;
+
+                const { data: nuevaCat, error: catError } = await supabase
+                    .from('categorias')
+                    .insert([{
+                        nombre: analisis.categoria_sugerida,
+                        descripcion: 'Categoría creada automáticamente por la IA',
+                        prioridad_base: prioridadNum
+                    }])
+                    .select()
+                    .single();
+
+                if (!catError && nuevaCat) {
+                    nueva_categoria_id = nuevaCat.id_categoria;
+                    console.log(`✅ Nueva categoría creada por IA: "${analisis.categoria_sugerida}"`);
+                } else {
+                    console.warn("⚠️ No se pudo crear la categoría sugerida por la IA:", catError?.message);
+                }
+            }
         }
 
         // Si hubo algún cambio, guardamos en historial y actualizamos el reporte original
         if (nuevo_estado_id !== reporte.estado_id || nueva_categoria_id !== reporte.categoria_id) {
-            
-            // Verificamos errores en la inserción del historial para que no tumbe el proceso
+
+            // 1. Guardar historial (el estado original ANTES de que la IA lo modifique)
             const { error: histError } = await supabase.from('reportes_historial').insert([{
                 reporte_id: id,
                 categoria_id_original: reporte.categoria_id,
                 estado_id_original: reporte.estado_id
             }]);
-            
+
             if (histError) console.error("Error al guardar historial:", histError.message);
 
-            // Actualizar reporte original
+            // 2. Actualizar reporte original directamente
             const { error: updateError } = await supabase.from('reportes')
-                .update({ 
-                    categoria_id: nueva_categoria_id, 
-                    estado_id: nuevo_estado_id 
+                .update({
+                    categoria_id: nueva_categoria_id,
+                    estado_id: nuevo_estado_id
                 })
                 .eq('id_reporte', id);
-                
+
             if (updateError) throw updateError;
-                
+
             // Actualizar el objeto reporte local para la respuesta
             reporte.categoria_id = nueva_categoria_id;
             reporte.estado_id = nuevo_estado_id;
@@ -288,36 +321,35 @@ const analizarReporteConIA = async (req, res, next) => {
 
         if (insertError) {
             console.warn("No se pudo guardar en 'analisis_ia': ", insertError.message);
-            return res.json({ 
-                ...reporte, 
-                analisis_ia: analisis, 
-                warning: "Análisis exitoso pero no se pudo persistir en la tabla analisis_ia." 
+            return res.json({
+                ...reporte,
+                analisis_ia: analisis,
+                warning: "Análisis exitoso pero no se pudo persistir en la tabla analisis_ia."
             });
         }
 
         res.json({ ...reporte, analisis_ia: data });
 
     } catch (err) {
-        // En lugar de pasar el error oculto a Express, lo imprimimos en Railway 
-        // y le respondemos a la App un JSON controlado para evitar que se caiga de golpe
         console.error("🔴 ERROR CRÍTICO EN ANALIZAR_REPORTE:", err);
-        
-        res.status(500).json({ 
+
+        res.status(500).json({
             error: "Error interno en el servidor al analizar con IA",
-            message: err.message 
+            message: err.message
         });
     }
 };
-// Obtener el historial de reportes modificados por la IA
+
+// Obtener el historial de reportes modificados por la IA (solo admin)
 const getHistorialIA = async (req, res, next) => {
     try {
         const { data, error } = await supabase
             .from('reportes_historial')
             .select(`
                 *,
-                reporte_actual:reportes(*),
+                reporte_actual:reportes(*, categorias(nombre), estados(nombre, color)),
                 categoria_original:categorias(nombre),
-                estado_original:estados(nombre)
+                estado_original:estados(nombre, color)
             `)
             .order('fecha_modificacion', { ascending: false });
 

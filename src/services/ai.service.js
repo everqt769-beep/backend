@@ -7,12 +7,15 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  * Función para analizar un reporte usando Gemini
  * @param {Object} reporte - Objeto completo del reporte.
  * @param {Array} imagenesUrls - Array de URLs de imágenes adjuntas.
+ * @param {Array} categoriasExistentes - Lista de categorías que ya existen en la BD.
  * @returns {Object} Resultado del análisis
  */
-const analizarReporte = async (reporte, imagenesUrls = []) => {
+const analizarReporte = async (reporte, imagenesUrls = [], categoriasExistentes = []) => {
     try {
-        // 1. CORRECCIÓN: Usamos gemini-1.5-flash, totalmente compatible con tu SDK
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // Construimos la lista de categorías para que la IA las conozca
+        const listaCategorias = categoriasExistentes.map(c => `- ${c.nombre} (Área: ${c.areas?.nombre || 'Sin área'})`).join('\n');
 
         let prompt = `
 Eres un sistema de Inteligencia Artificial para el backend de una app de reportes vecinales.
@@ -22,11 +25,21 @@ Esto es para uso exclusivo de los administradores y para evitar bromas.
 Datos del reporte original:
 ${JSON.stringify(reporte, null, 2)}
 
-Devuelve un objeto con la siguiente estructura:
+Estas son las categorías que YA EXISTEN en el sistema:
+${listaCategorias}
+
+REGLAS IMPORTANTES:
+1. Si la categoría actual del vecino es correcta, devuelve ESE MISMO nombre exacto en "categoria_sugerida".
+2. Si necesitas cambiar la categoría, usa PREFERIBLEMENTE una de las categorías existentes (copia el nombre exacto).
+3. Solo sugiere una categoría NUEVA si ninguna de las existentes encaja para nada.
+4. Si el reporte es una broma o no es real, marca es_valido como false.
+
+Devuelve un JSON con esta estructura exacta:
 {
-    "es_valido": true o false, // false si parece una broma, exageración absurda o no es una denuncia real
+    "es_valido": true o false,
     "prioridad": "alta", "media" o "baja",
-    "categoria_sugerida": "Nombre de la categoría (puedes sugerir una nueva si las típicas no encajan, ej: 'Seguridad', 'Infraestructura', 'Limpieza', etc.)"
+    "categoria_sugerida": "Nombre exacto de la categoría",
+    "justificacion": "Explicación breve de por qué tomaste esta decisión"
 }
 `;
 
@@ -39,8 +52,7 @@ Devuelve un objeto con la siguiente estructura:
                 const arrayBuffer = await response.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
                 const mimeType = response.headers.get('content-type') || 'image/jpeg';
-                
-                // Formato 'Part' que requiere el SDK
+
                 imageParts.push({
                     inlineData: {
                         data: buffer.toString("base64"),
@@ -52,13 +64,12 @@ Devuelve un objeto con la siguiente estructura:
             }
         }
 
-        // 2. CORRECCIÓN: Estructura estricta { role, parts } para evitar el error 400
         const result = await model.generateContent({
             contents: [{
                 role: "user",
                 parts: [
-                    { text: prompt }, // El texto debe ir dentro de un objeto con la propiedad 'text'
-                    ...imageParts     // Las imágenes ya están estructuradas correctamente
+                    { text: prompt },
+                    ...imageParts
                 ]
             }],
             generationConfig: {
@@ -67,8 +78,6 @@ Devuelve un objeto con la siguiente estructura:
         });
 
         const responseText = result.response.text();
-
-        // Convertimos el JSON limpio directamente a objeto
         return JSON.parse(responseText);
 
     } catch (error) {
