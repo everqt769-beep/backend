@@ -12,7 +12,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const analizarReporte = async (reporte, imagenesUrls = []) => {
     try {
         // 1. CORRECCIÓN: Usamos gemini-1.5-flash, totalmente compatible con tu SDK
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         let prompt = `
 Eres un sistema de Inteligencia Artificial para el backend de una app de reportes vecinales.
