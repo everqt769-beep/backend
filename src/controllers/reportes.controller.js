@@ -291,6 +291,27 @@ const analizarReporteConIA = async (req, res, next) => {
         }
 
         res.json({ ...reporte, analisis_ia: data });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+// Obtener el historial de reportes modificados por la IA
+const getHistorialIA = async (req, res, next) => {
+    try {
+        const { data, error } = await supabase
+            .from('reportes_historial')
+            .select(`
+                *,
+                reporte_actual:reportes(*),
+                categoria_original:categorias(nombre),
+                estado_original:estados(nombre)
+            `)
+            .order('fecha_modificacion', { ascending: false });
+
+        if (error) throw error;
+        res.json(data);
     } catch (err) {
         next(err);
     }
@@ -303,5 +324,6 @@ module.exports = {
     updateEstadoReporte,
     updateReporte,
     deleteReporte,
-    analizarReporteConIA
+    analizarReporteConIA,
+    getHistorialIA
 };

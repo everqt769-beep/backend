@@ -23,9 +23,14 @@ Este archivo posee la función principal `analizarReporte(reporte, imagenesUrls)
 - Envía el *Prompt* (instrucciones maestras) pidiendo a la IA que devuelva un objeto con la estructura `es_valido`, `prioridad` y `categoria_sugerida`.
 
 ### B. Modificación en Rutas (`src/routes/reportes.routes.js`)
-Se expuso un nuevo endpoint:
+Se expusieron dos nuevos endpoints:
 - **Ruta:** `POST /reportes/:id/analizar`
 - **Permisos:** Protegido mediante `requireRole(['funcionario', 'admin'])`.
+- El ciudadano o "vecino" no tiene acceso para activar la IA en su propio reporte de manera manual.
+
+- **Ruta:** `GET /reportes/historial-ia`
+- **Permisos:** Protegido mediante `requireRole(['admin'])`.
+- Permite consultar el historial de los reportes originales vs cómo quedaron tras ser cambiados por la Inteligencia Artificial. Exclusivo para administradores.
 - El ciudadano o "vecino" no tiene acceso para activar la IA en su propio reporte de manera manual.
 
 ### C. Controlador Principal (`src/controllers/reportes.controller.js`)
