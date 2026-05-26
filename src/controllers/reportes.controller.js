@@ -11,7 +11,8 @@ const getReportes = async (req, res, next) => {
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
-                estados(nombre, color)
+                estados(nombre, color),
+                ia_analisis(*)
             `);
 
         // Aplicar filtro por usuario si existe
@@ -50,7 +51,8 @@ const getReporteById = async (req, res, next) => {
                 estados(*),
                 adjuntos(*),
                 comentarios(*, usuarios(nombre, rol)),
-                seguimiento(*, estados(*), usuarios(nombre))
+                seguimiento(*, estados(*), usuarios(nombre)),
+                ia_analisis(*)
             `)
             .eq('id_reporte', id)
             .single();
