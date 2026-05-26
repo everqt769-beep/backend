@@ -37,11 +37,13 @@ const getReportes = async (req, res, next) => {
     }
 };
 
-// Obtener un reporte por ID
+// Obtener un reporte por ID (consulta en dos pasos para incluir analisis_ia)
 const getReporteById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
+
+    // 1) Traer el reporte con sus relaciones que sí existen
+    const { data: reporte, error: reporteError } = await supabase
       .from('reportes')
       .select(`
         *,
@@ -55,19 +57,34 @@ const getReporteById = async (req, res, next) => {
       .eq('id_reporte', id)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') { // código típico de "no encontrado"
+    if (reporteError) {
+      // Manejo explícito de "no encontrado"
+      if (reporteError.code === 'PGRST116') {
         return res.status(404).json({ error: 'Reporte no encontrado' });
       }
-      throw error;
+      throw reporteError;
     }
 
-    res.json(data);
+    // 2) Traer el análisis IA por separado (si existe)
+    const { data: analisisIA, error: analisisError } = await supabase
+      .from('analisis_ia')
+      .select('*')
+      .eq('reporte_id', id)
+      .single();
+
+    // Si analisisError existe y no es "no encontrado", loguearlo pero no bloquear la respuesta
+    if (analisisError && analisisError.code !== 'PGRST116') {
+      console.warn('Advertencia al obtener analisis_ia:', analisisError.message);
+    }
+
+    // Unir y devolver
+    res.json({ ...reporte, analisis_ia: analisisIA || null });
   } catch (err) {
-    console.error("Error en getReporteById:", err.message);
+    console.error("Error en getReporteById:", err.message || err);
     res.status(500).json({ error: "Error interno al obtener el reporte" });
   }
 };
+
 
 
 // Crear un nuevo reporte
