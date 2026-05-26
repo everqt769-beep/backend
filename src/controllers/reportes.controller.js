@@ -39,29 +39,37 @@ const getReportes = async (req, res, next) => {
 
 // Obtener un reporte por ID
 const getReporteById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { data, error } = await supabase
-            .from('reportes')
-            .select(`
-                *,
-                usuarios(nombre, correo),
-                categorias(nombre, areas(*)),
-                estados(*),
-                adjuntos(*),
-                comentarios(*, usuarios(nombre, rol)),
-                seguimiento(*, estados(*), usuarios(nombre)),
-                ia_analisis(*)
-            `)
-            .eq('id_reporte', id)
-            .single();
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('reportes')
+      .select(`
+        *,
+        usuarios(nombre, correo),
+        categorias(nombre, areas(*)),
+        estados(*),
+        adjuntos(*),
+        comentarios(*, usuarios(nombre, rol)),
+        seguimiento(*, estados(*), usuarios(nombre)),
+        ia_analisis(*)
+      `)
+      .eq('id_reporte', id)
+      .single();
 
-        if (error) throw error;
-        res.json(data);
-    } catch (err) {
-        next(err);
+    if (error) {
+      if (error.code === 'PGRST116') { // código típico de "no encontrado"
+        return res.status(404).json({ error: 'Reporte no encontrado' });
+      }
+      throw error;
     }
+
+    res.json(data);
+  } catch (err) {
+    console.error("Error en getReporteById:", err.message);
+    res.status(500).json({ error: "Error interno al obtener el reporte" });
+  }
 };
+
 
 // Crear un nuevo reporte
 const createReporte = async (req, res, next) => {
