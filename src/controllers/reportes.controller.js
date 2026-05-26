@@ -11,8 +11,7 @@ const getReportes = async (req, res, next) => {
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
-                estados(nombre, color),
-                ia_analisis(*)
+                estados(nombre, color)
             `);
 
         // Aplicar filtro por usuario si existe
