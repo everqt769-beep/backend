@@ -4,24 +4,24 @@ const { analizarReporte } = require('../services/ai.service');
 // Obtener todos los reportes
 const getReportes = async (req, res, next) => {
     try {
-
         let query = supabase
             .from('reportes')
             .select(`
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
-                estados(nombre, color)
+                estados(nombre, color),
+                analisis_ia(
+                    es_valido,
+                    prioridad,
+                    categoria_sugerida,
+                    justificacion,
+                    fecha_analisis
+                )
             `);
 
-        // Aplicar filtro por usuario si existe
         if (req.query.usuario_id) {
-
-            // Convierte:
-            // eq.uuid
-            // -> uuid
             const usuarioId = req.query.usuario_id.replace('eq.', '');
-
             query = query.eq('usuario_id', usuarioId);
         }
 
@@ -31,7 +31,6 @@ const getReportes = async (req, res, next) => {
         if (error) throw error;
 
         res.json(data);
-
     } catch (err) {
         next(err);
     }
