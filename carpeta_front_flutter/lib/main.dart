@@ -1,87 +1,93 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'core/constants/api_constants.dart';
-import 'core/theme/app_theme.dart';
-import 'providers/auth_provider.dart';
-import 'providers/reportes_provider.dart';
-import 'providers/catalogos_provider.dart';
+import 'src/core/constants/api_constants.dart';
+import 'src/core/theme/app_theme.dart';
+import 'src/core/router/app_router.dart';
+import 'src/providers/auth_provider.dart';
+import 'src/providers/reportes_provider.dart';
+import 'src/providers/catalogos_provider.dart';
+import 'src/providers/bloqueos_provider.dart';
+import 'src/providers/dashboard_provider.dart';
+import 'src/core/services/auth_service.dart';
 
-import 'auth/screens/login_screen.dart';
-import 'ciudadano/screens/ciudadano_home_screen.dart';
-import 'funcionario/screens/funcionario_home_screen.dart';
-import 'admin/screens/admin_home_screen.dart';
-
-/// Punto de entrada de VecinApp.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Supabase
   await Supabase.initialize(
     url: ApiConstants.supabaseUrl,
     anonKey: ApiConstants.supabaseAnonKey,
   );
 
-  // Inicializar formato de fechas en español
   await initializeDateFormatting('es', null);
 
-  runApp(const VecinApp());
+  final uri = Uri.base;
+  if (uri.queryParameters.containsKey('code')) {
+    try {
+      await Supabase.instance.client.auth.exchangeCodeForSession(
+        uri.queryParameters['code']!,
+      );
+    } catch (e) {
+      debugPrint('Error exchanging code: $e');
+    }
+  }
+
+  // Creamos el AuthProvider aquí para pasarlo
+  final authService = AuthService();
+  final authProvider = AuthProvider()..init();
+
+  runApp(VecinApp(authProvider: authProvider, authService: authService));
 }
 
-class VecinApp extends StatelessWidget {
-  const VecinApp({super.key});
+class VecinApp extends StatefulWidget {
+  final AuthService authService;
+  final AuthProvider authProvider;
+
+  const VecinApp({
+    super.key,
+    required this.authProvider,
+    required this.authService,
+  });
+
+  @override
+  State<VecinApp> createState() => _VecinAppState();
+}
+
+class _VecinAppState extends State<VecinApp> {
+  late final AppRouter _appRouter;
+
+  @override
+  void initState() {
+    super.initState();
+    _appRouter = AppRouter(widget.authProvider); // Pasamos el authProvider
+
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        _appRouter.router.go('/update-password');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
+        ChangeNotifierProvider.value(value: widget.authProvider),
+        Provider<AuthService>.value(value: widget.authService),
         ChangeNotifierProvider(create: (_) => ReportesProvider()),
         ChangeNotifierProvider(create: (_) => CatalogosProvider()),
+        ChangeNotifierProvider(create: (_) => BloqueosProvider()),
+        ChangeNotifierProvider(create: (_) => DashboardProvider()),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: 'VecinApp',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        home: const _AuthGate(),
+        routerConfig: _appRouter.router,
       ),
     );
-  }
-}
-
-/// Gate de autenticación — redirige según estado de sesión y rol.
-class _AuthGate extends StatelessWidget {
-  const _AuthGate();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-
-    // No autenticado → Login
-    if (!auth.isAuthenticated) {
-      return const LoginScreen();
-    }
-
-    // Autenticado pero sin perfil cargado → Loading
-    if (auth.usuario == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    // Redirigir según rol
-    switch (auth.rol) {
-      case 'admin':
-        return const AdminHomeScreen();
-      case 'funcionario':
-        return const FuncionarioHomeScreen();
-      case 'ciudadano':
-      default:
-        return const CiudadanoHomeScreen();
-    }
   }
 }

@@ -8,19 +8,33 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  * @param {Object} reporte - Objeto completo del reporte.
  * @param {Array} imagenesUrls - Array de URLs de imágenes adjuntas.
  * @param {Array} categoriasExistentes - Lista de categorías que ya existen en la BD.
+ * @param {number} strikesUsuario - Cantidad de strikes previos del usuario (0 = nuevo).
  * @returns {Object} Resultado del análisis
  */
-const analizarReporte = async (reporte, imagenesUrls = [], categoriasExistentes = []) => {
+const analizarReporte = async (reporte, imagenesUrls = [], categoriasExistentes = [], strikesUsuario = 0) => {
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Construimos la lista de categorías para que la IA las conozca
         const listaCategorias = categoriasExistentes.map(c => `- ${c.nombre} (Área: ${c.areas?.nombre || 'Sin área'})`).join('\n');
 
+        // Contexto adicional sobre el historial del usuario
+        let contextoUsuario = '';
+        if (strikesUsuario > 0) {
+            contextoUsuario = `
+⚠️ ATENCIÓN: Este usuario tiene ${strikesUsuario} strike(s) previo(s) por enviar reportes falsos.
+Sé MÁS ESTRICTO al evaluar la veracidad de este reporte.
+Un usuario reincidente tiene mayor probabilidad de enviar reportes falsos.
+Analiza con especial cuidado la coherencia entre la descripción, la categoría y las imágenes.
+`;
+        }
+
         let prompt = `
 Eres un sistema de Inteligencia Artificial para el backend de una app de reportes vecinales.
 Tu trabajo es analizar la denuncia del vecino y las imágenes proporcionadas (si las hay) para clasificarla correctamente.
 Esto es para uso exclusivo de los administradores y para evitar bromas.
+
+${contextoUsuario}
 
 Datos del reporte original:
 ${JSON.stringify(reporte, null, 2)}
@@ -33,6 +47,8 @@ REGLAS IMPORTANTES:
 2. Si necesitas cambiar la categoría, usa PREFERIBLEMENTE una de las categorías existentes (copia el nombre exacto).
 3. Solo sugiere una categoría NUEVA si ninguna de las existentes encaja para nada.
 4. Si el reporte es una broma o no es real, marca es_valido como false.
+5. Si las imágenes no coinciden con la descripción, marca es_valido como false.
+6. Si la descripción es vaga, incoherente o claramente falsa, marca es_valido como false.
 
 Devuelve un JSON con esta estructura exacta:
 {

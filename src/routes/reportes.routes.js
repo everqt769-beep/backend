@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const router = Router();
 const { getReportes, getReporteById, createReporte, updateEstadoReporte, updateReporte, deleteReporte, analizarReporteConIA, getHistorialIA } = require('../controllers/reportes.controller');
-const { requireAuth, requireRole } = require('../middlewares/authMiddleware');
+const { requireAuth, requireRole, checkBloqueo } = require('../middlewares/authMiddleware');
 
 // Rutas públicas (lectura)
 router.get('/', getReportes);
@@ -12,10 +12,10 @@ router.get('/historial-ia', requireAuth, requireRole(['admin']), getHistorialIA)
 // Ruta pública por ID
 router.get('/:id', getReporteById);
 
-// Rutas autenticadas
+// Rutas autenticadas (con verificación de bloqueo para ciudadanos)
 router.use(requireAuth);
-router.post('/', createReporte);
-router.put('/:id', updateReporte);
+router.post('/', checkBloqueo, createReporte);
+router.put('/:id', checkBloqueo, updateReporte);
 
 // Rutas de funcionario/admin
 router.post('/:id/analizar', requireRole(['funcionario', 'admin']), analizarReporteConIA);

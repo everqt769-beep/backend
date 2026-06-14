@@ -1,0 +1,260 @@
+Estructura de la base de datos (esquema public)
+A continuación tienes todas las tablas del esquema public, con campos, PK y FK (relaciones) según el introspectado actual.
+
+public.estados
+PK: id_estado (uuid)
+RLS: false
+Campos:
+
+id_estado uuid
+entidad text
+codigo text (unique)
+nombre text
+color varchar (nullable) (check formato #RRGGBB)
+descripcion text (nullable)
+FK:
+
+seguimiento.estado_nuevo_id → estados.id_estado
+reportes_historial.estado_id_original → estados.id_estado
+asignaciones.estado_id → estados.id_estado
+adjuntos.estado_moderacion_id → estados.id_estado
+reportes.estado_id → estados.id_estado
+usuarios.estado_id → estados.id_estado
+public.areas
+PK: id_area (uuid)
+RLS: true
+Campos:
+
+id_area uuid
+nombre text (unique)
+descripcion text (nullable)
+telefono varchar (nullable)
+email text (nullable)
+FK:
+
+usuarios.area_id → areas.id_area
+categorias.area_id → areas.id_area
+public.usuarios
+PK: id_usuario (uuid)
+RLS: false
+Campos:
+
+id_usuario uuid (unique)
+nombre text (nullable)
+correo text (unique)
+rol text (nullable, default 'ciudadano') (check: ciudadano|funcionario|admin)
+area_id uuid (nullable)
+telefono varchar (nullable)
+estado_id uuid (nullable)
+fecha_registro timestamptz (nullable, default now())
+FK:
+
+usuarios.id_usuario → auth.users.id (la FK aparece como usuarios_id_usuario_fkey)
+usuarios.area_id → areas.id_area
+usuarios.estado_id → estados.id_estado
+reportes.usuario_id → usuarios.id_usuario
+adjuntos.usuario_id → usuarios.id_usuario
+asignaciones.funcionario_id → usuarios.id_usuario
+comentarios.usuario_id → usuarios.id_usuario
+seguimiento.usuario_id → usuarios.id_usuario
+public.categorias
+PK: id_categoria (uuid)
+RLS: true
+Campos:
+
+id_categoria uuid
+nombre text
+descripcion text (nullable)
+prioridad_base int (nullable) (check: 1..3)
+area_id uuid (nullable)
+FK:
+
+categorias.area_id → areas.id_area
+reportes_historial.categoria_id_original → categorias.id_categoria
+reportes.categoria_id → categorias.id_categoria
+public.reportes
+PK: id_reporte (uuid)
+RLS: false
+Campos:
+
+id_reporte uuid
+usuario_id uuid (nullable)
+categoria_id uuid (nullable)
+descripcion text
+latitud numeric (nullable)
+longitud numeric (nullable)
+direccion text (nullable)
+estado_id uuid (nullable)
+fecha_creacion timestamptz (default now())
+ia_analisis jsonb (nullable)
+FK:
+
+seguimiento.reporte_id → reportes.id_reporte
+analisis_ia.reporte_id → reportes.id_reporte
+reportes_historial.reporte_id → reportes.id_reporte
+comentarios.reporte_id → reportes.id_reporte
+asignaciones.reporte_id → reportes.id_reporte
+adjuntos.reporte_id → reportes.id_reporte
+reportes.estado_id → estados.id_estado
+reportes.categoria_id → categorias.id_categoria
+reportes.usuario_id → usuarios.id_usuario
+public.adjuntos
+PK: id_adjunto (uuid)
+RLS: false
+Campos:
+
+id_adjunto uuid
+reporte_id uuid (nullable)
+usuario_id uuid (nullable)
+tipo text (nullable) (check: imagen|video|documento)
+url text
+estado_moderacion_id uuid (nullable)
+nombre_archivo text (nullable)
+tamano_bytes bigint (nullable)
+descripcion text (nullable)
+fecha_subida timestamptz (default now())
+FK:
+
+adjuntos.reporte_id → reportes.id_reporte
+adjuntos.estado_moderacion_id → estados.id_estado
+adjuntos.usuario_id → usuarios.id_usuario
+public.asignaciones
+PK: id_asignacion (uuid)
+RLS: false
+Campos:
+
+id_asignacion uuid
+reporte_id uuid (nullable)
+funcionario_id uuid (nullable)
+fecha_asignacion timestamptz (default now())
+estado_id uuid (nullable)
+FK:
+
+asignaciones.funcionario_id → usuarios.id_usuario
+asignaciones.reporte_id → reportes.id_reporte
+asignaciones.estado_id → estados.id_estado
+public.comentarios
+PK: id_comentario (uuid)
+RLS: false
+Campos:
+
+id_comentario uuid
+reporte_id uuid (nullable)
+usuario_id uuid (nullable)
+texto text
+tipo text (nullable) (check: publico|interno|respuesta_oficial)
+padre_id uuid (nullable) ✅ (comentarios anidados)
+fecha timestamptz (default now())
+FK:
+
+comentarios.usuario_id → usuarios.id_usuario
+comentarios.padre_id → comentarios.id_comentario
+comentarios.reporte_id → reportes.id_reporte
+public.seguimiento
+PK: id_seguimiento (uuid)
+RLS: false
+Campos:
+
+id_seguimiento uuid
+reporte_id uuid (nullable)
+usuario_id uuid (nullable)
+tipo_evento text (nullable)
+descripcion text (nullable)
+estado_nuevo_id uuid (nullable)
+fecha timestamptz (default now())
+FK:
+
+seguimiento.reporte_id → reportes.id_reporte
+seguimiento.estado_nuevo_id → estados.id_estado
+seguimiento.usuario_id → usuarios.id_usuario
+public.analisis_ia
+PK: id_analisis (uuid)
+RLS: false
+Campos:
+
+id_analisis uuid
+reporte_id uuid (unique, nullable)
+es_valido boolean
+prioridad text (nullable) (check: alta|media|baja)
+categoria_sugerida text (nullable)
+justificacion text (nullable)
+fecha_analisis timestamptz (default now())
+FK:
+
+analisis_ia.reporte_id → reportes.id_reporte
+(y por ser unique, implica relación 1:1 a reportes)
+public.reportes_historial
+PK: id_historial (uuid)
+RLS: false
+Campos:
+
+id_historial uuid
+reporte_id uuid (nullable)
+categoria_id_original uuid (nullable)
+estado_id_original uuid (nullable)
+fecha_modificacion timestamptz (default now())
+FK:
+
+reportes_historial.reporte_id → reportes.id_reporte
+reportes_historial.estado_id_original → estados.id_estado
+reportes_historial.categoria_id_original → categorias.id_categoria
+Relaciones principales (resumen)
+areas (1) → categorias (N)
+areas (1) → usuarios (N)
+estados (1) → reportes (N), usuarios (N), asignaciones (N), seguimiento (N), adjuntos (N)
+usuarios (1) → reportes (N), comentarios (N), adjuntos (N), asignaciones (N) (como funcionario), seguimiento (N)
+categorias (1) → reportes (N)
+reportes (1) → comentarios (N), adjuntos (N), seguimiento (N), asignaciones (N), reportes_historial (N)
+reportes (1) ↔ analisis_ia (1) (por reporte_id unique)
+public.bloqueos_usuario
+PK: id_bloqueo (uuid)
+RLS: false
+Campos:
+
+id_bloqueo uuid
+usuario_id uuid (NOT NULL)
+reporte_id uuid (nullable)
+motivo text (NOT NULL)
+tipo text (NOT NULL) (check: manual|automatico_ia)
+strikes_acumulados int (NOT NULL, default 1)
+fecha_bloqueo timestamptz (NOT NULL, default now())
+fecha_desbloqueo timestamptz (nullable) — NULL = permanente
+desbloqueado_por uuid (nullable)
+fecha_desbloqueado timestamptz (nullable)
+activo boolean (NOT NULL, default true)
+notas_admin text (nullable)
+FK:
+
+bloqueos_usuario.usuario_id → usuarios.id_usuario (ON DELETE CASCADE)
+bloqueos_usuario.reporte_id → reportes.id_reporte (ON DELETE SET NULL)
+bloqueos_usuario.desbloqueado_por → usuarios.id_usuario
+public.configuracion_bloqueos
+PK: id (int, default 1, check id = 1) — Tabla singleton (1 sola fila)
+RLS: false
+Campos:
+
+id int (default 1)
+auto_bloqueo_ia boolean (NOT NULL, default false)
+strikes_para_bloqueo int (NOT NULL, default 1)
+duracion_primer_strike_horas int (NOT NULL, default 24)
+duracion_segundo_strike_horas int (NOT NULL, default 72)
+duracion_tercer_strike_horas int (NOT NULL, default 0) — 0 = permanente
+telefono_contacto text (NOT NULL, default '222-0000')
+mensaje_bloqueo text (NOT NULL, default 'Su cuenta ha sido suspendida...')
+updated_at timestamptz (default now())
+FK: ninguna
+
+Nota sobre estados de usuario:
+- activo: Usuario puede reportar y comentar
+- bloqueado: Usuario no puede usar el sistema
+- suspendido: Usuario suspendido temporalmente por reportes falsos (NUEVO)
+
+Relaciones principales (resumen)
+areas (1) → categorias (N)
+areas (1) → usuarios (N)
+estados (1) → reportes (N), usuarios (N), asignaciones (N), seguimiento (N), adjuntos (N)
+usuarios (1) → reportes (N), comentarios (N), adjuntos (N), asignaciones (N) (como funcionario), seguimiento (N), bloqueos_usuario (N)
+categorias (1) → reportes (N)
+reportes (1) → comentarios (N), adjuntos (N), seguimiento (N), asignaciones (N), reportes_historial (N), bloqueos_usuario (N)
+reportes (1) ↔ analisis_ia (1) (por reporte_id unique)
+configuracion_bloqueos → singleton (1 fila, configuración global de bloqueos)

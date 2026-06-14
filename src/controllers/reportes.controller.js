@@ -220,7 +220,7 @@ const deleteReporte = async (req, res, next) => {
     }
 };
 
-// Analizar un reporte usando IA (Gemini)
+// Analizar un reporte usando IA (Gemini) — CON AUTO-BLOQUEO
 const analizarReporteConIA = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -231,7 +231,7 @@ const analizarReporteConIA = async (req, res, next) => {
             .select(`
                 *,
                 categorias(nombre, prioridad_base, areas(nombre)),
-                usuarios(nombre, rol),
+                usuarios(id_usuario, nombre, rol),
                 adjuntos(url)
             `)
             .eq('id_reporte', id)
@@ -245,14 +245,25 @@ const analizarReporteConIA = async (req, res, next) => {
             .from('categorias')
             .select('id_categoria, nombre, prioridad_base, areas(nombre)');
 
+        // Obtener historial de strikes del usuario (para enriquecer el prompt)
+        let strikesUsuario = 0;
+        if (reporte.usuarios?.rol === 'ciudadano') {
+            const { count } = await supabase
+                .from('bloqueos_usuario')
+                .select('*', { count: 'exact', head: true })
+                .eq('usuario_id', reporte.usuario_id);
+            strikesUsuario = count || 0;
+        }
+
         // Extraer URLs de los adjuntos para pasárselos a la IA
         const imagenesUrls = reporte.adjuntos ? reporte.adjuntos.map(adj => adj.url) : [];
 
-        // Llamar a Gemini (ahora le pasamos las categorías existentes)
-        const analisis = await analizarReporte(reporte, imagenesUrls, categoriasExistentes || []);
+        // Llamar a Gemini (ahora le pasamos las categorías existentes y los strikes)
+        const analisis = await analizarReporte(reporte, imagenesUrls, categoriasExistentes || [], strikesUsuario);
 
         let nuevo_estado_id = reporte.estado_id;
         let nueva_categoria_id = reporte.categoria_id;
+        let bloqueoRealizado = null;
 
         // CASO 1: Si la IA dice que es broma/falso → rechazar
         if (analisis.es_valido === false) {
@@ -263,6 +274,17 @@ const analizarReporteConIA = async (req, res, next) => {
                 .eq('codigo', 'rechazado')
                 .single();
             if (estadoData) nuevo_estado_id = estadoData.id_estado;
+
+            // ── AUTO-BLOQUEO POR IA ──
+            // Solo si el dueño del reporte es ciudadano
+            if (reporte.usuarios?.rol === 'ciudadano') {
+                bloqueoRealizado = await _intentarAutoBloqueo(
+                    reporte.usuario_id,
+                    reporte.usuarios.nombre,
+                    id,
+                    analisis.justificacion
+                );
+            }
 
         // CASO 2: Si la IA sugiere una categoría diferente
         } else if (analisis.categoria_sugerida && analisis.categoria_sugerida !== reporte.categorias?.nombre) {
@@ -348,11 +370,12 @@ const analizarReporteConIA = async (req, res, next) => {
             return res.json({
                 ...reporte,
                 analisis_ia: analisis,
+                bloqueo: bloqueoRealizado,
                 warning: "Análisis exitoso pero no se pudo persistir en la tabla analisis_ia."
             });
         }
 
-        res.json({ ...reporte, analisis_ia: data });
+        res.json({ ...reporte, analisis_ia: data, bloqueo: bloqueoRealizado });
 
     } catch (err) {
         console.error("🔴 ERROR CRÍTICO EN ANALIZAR_REPORTE:", err);
@@ -361,6 +384,120 @@ const analizarReporteConIA = async (req, res, next) => {
             error: "Error interno en el servidor al analizar con IA",
             message: err.message
         });
+    }
+};
+
+/**
+ * Función interna: intentar auto-bloqueo por IA
+ * Verifica la configuración y aplica el bloqueo si corresponde
+ */
+const _intentarAutoBloqueo = async (usuario_id, nombre_usuario, reporte_id, justificacion) => {
+    try {
+        // Consultar configuración
+        const { data: config } = await supabase
+            .from('configuracion_bloqueos')
+            .select('*')
+            .eq('id', 1)
+            .single();
+
+        if (!config || !config.auto_bloqueo_ia) {
+            console.log('ℹ️ Auto-bloqueo por IA desactivado');
+            return null;
+        }
+
+        // Contar strikes previos del usuario (acumulativos)
+        const { count: strikesAnteriores } = await supabase
+            .from('bloqueos_usuario')
+            .select('*', { count: 'exact', head: true })
+            .eq('usuario_id', usuario_id);
+
+        const strikesActuales = (strikesAnteriores || 0) + 1;
+
+        // Verificar si ya tiene un bloqueo activo
+        const { data: bloqueoExistente } = await supabase
+            .from('bloqueos_usuario')
+            .select('id_bloqueo')
+            .eq('usuario_id', usuario_id)
+            .eq('activo', true)
+            .maybeSingle();
+
+        if (bloqueoExistente) {
+            console.log(`ℹ️ Usuario ${usuario_id} ya tiene un bloqueo activo, no se aplica otro`);
+            return { ya_bloqueado: true, strikes: strikesActuales };
+        }
+
+        // Calcular duración del bloqueo según strikes
+        let duracion_horas = 0;
+        if (strikesActuales === 1) {
+            duracion_horas = config.duracion_primer_strike_horas;
+        } else if (strikesActuales === 2) {
+            duracion_horas = config.duracion_segundo_strike_horas;
+        } else {
+            duracion_horas = config.duracion_tercer_strike_horas; // 0 = permanente
+        }
+
+        // Calcular fecha de desbloqueo
+        let fecha_desbloqueo = null;
+        if (duracion_horas > 0) {
+            fecha_desbloqueo = new Date();
+            fecha_desbloqueo.setHours(fecha_desbloqueo.getHours() + duracion_horas);
+        }
+
+        // Insertar bloqueo
+        const { data: bloqueo, error: bloqueoError } = await supabase
+            .from('bloqueos_usuario')
+            .insert([{
+                usuario_id,
+                reporte_id,
+                motivo: `Bloqueo automático por IA: ${justificacion || 'Reporte detectado como falso'}`,
+                tipo: 'automatico_ia',
+                strikes_acumulados: strikesActuales,
+                fecha_desbloqueo
+            }])
+            .select()
+            .single();
+
+        if (bloqueoError) {
+            console.error('Error al crear bloqueo automático:', bloqueoError.message);
+            return null;
+        }
+
+        // Cambiar estado del usuario a 'suspendido'
+        const { data: estadoSuspendido } = await supabase
+            .from('estados')
+            .select('id_estado')
+            .eq('entidad', 'usuario')
+            .eq('codigo', 'suspendido')
+            .single();
+
+        if (estadoSuspendido) {
+            await supabase
+                .from('usuarios')
+                .update({ estado_id: estadoSuspendido.id_estado })
+                .eq('id_usuario', usuario_id);
+        }
+
+        // Registrar en seguimiento
+        await supabase.from('seguimiento').insert([{
+            reporte_id,
+            usuario_id,
+            tipo_evento: 'bloqueo_automatico_ia',
+            descripcion: `Usuario ${nombre_usuario} bloqueado automáticamente por la IA (Strike #${strikesActuales}). ${duracion_horas > 0 ? `Duración: ${duracion_horas}h` : 'Permanente'}`,
+            estado_nuevo_id: estadoSuspendido?.id_estado
+        }]);
+
+        console.log(`🚫 Usuario ${nombre_usuario} (${usuario_id}) bloqueado automáticamente por IA — Strike #${strikesActuales}`);
+
+        return {
+            bloqueado: true,
+            strikes: strikesActuales,
+            duracion_horas,
+            permanente: duracion_horas === 0,
+            fecha_desbloqueo
+        };
+    } catch (err) {
+        console.error('Error en auto-bloqueo:', err.message);
+        return null;
     }
 };
 
