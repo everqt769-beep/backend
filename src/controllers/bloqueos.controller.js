@@ -5,28 +5,55 @@ const { supabase } = require('../config/supabase');
 // ─────────────────────────────────────────────
 const getUsuariosBloqueados = async (req, res, next) => {
     try {
-        const { data, error } = await supabase
+        const { data: bloqueos, error: bloqueosError } = await supabase
             .from('bloqueos_usuario')
-            .select(`
-                *,
-                usuario:usuarios!bloqueos_usuario_usuario_id_fkey(id_usuario, nombre, correo, telefono, rol),
-                reporte:reportes(id_reporte, descripcion, fecha_creacion)
-            `)
+            .select('*')
             .eq('activo', true)
             .order('fecha_bloqueo', { ascending: false });
 
-        if (error) throw error;
+        if (bloqueosError) throw bloqueosError;
 
-        // Auto-expirar bloqueos temporales que ya pasaron
+        if (!bloqueos || bloqueos.length === 0) {
+            return res.json([]);
+        }
+
+        // Obtener los datos de los usuarios correspondientes
+        const userIds = bloqueos.map(b => b.usuario_id);
+        const { data: users, error: usersError } = await supabase
+            .from('usuarios')
+            .select('id_usuario, nombre, correo, telefono, rol')
+            .in('id_usuario', userIds);
+
+        if (usersError) throw usersError;
+
+        // Obtener los reportes correspondientes
+        const reportIds = bloqueos.map(b => b.reporte_id).filter(id => id != null);
+        let reports = [];
+        if (reportIds.length > 0) {
+            const { data: reps, error: repsError } = await supabase
+                .from('reportes')
+                .select('id_reporte, descripcion, fecha_creacion')
+                .in('id_reporte', reportIds);
+            if (repsError) throw repsError;
+            reports = reps || [];
+        }
+
         const ahora = new Date();
         const bloqueosActivos = [];
 
-        for (const bloqueo of data) {
+        for (const bloqueo of bloqueos) {
             if (bloqueo.fecha_desbloqueo && new Date(bloqueo.fecha_desbloqueo) <= ahora) {
                 // Expiró → desactivar
                 await _autoDesbloquear(bloqueo.id_bloqueo, bloqueo.usuario_id);
             } else {
-                bloqueosActivos.push(bloqueo);
+                const user = (users || []).find(u => u.id_usuario === bloqueo.usuario_id);
+                const report = reports.find(r => r.id_reporte === bloqueo.reporte_id);
+
+                bloqueosActivos.push({
+                    ...bloqueo,
+                    usuario: user || null,
+                    reporte: report || null
+                });
             }
         }
 
@@ -43,17 +70,52 @@ const getHistorialBloqueos = async (req, res, next) => {
     try {
         const { usuario_id } = req.params;
 
-        const { data, error } = await supabase
+        const { data: bloqueos, error: errorBloqueos } = await supabase
             .from('bloqueos_usuario')
-            .select(`
-                *,
-                reporte:reportes(id_reporte, descripcion),
-                admin_desbloqueo:usuarios!bloqueos_usuario_desbloqueado_por_fkey(nombre, correo)
-            `)
+            .select('*')
             .eq('usuario_id', usuario_id)
             .order('fecha_bloqueo', { ascending: false });
 
-        if (error) throw error;
+        if (errorBloqueos) throw errorBloqueos;
+
+        if (!bloqueos || bloqueos.length === 0) {
+            return res.json([]);
+        }
+
+        // Obtener usuarios administradores que realizaron los desbloqueos
+        const adminIds = bloqueos.map(b => b.desbloqueado_por).filter(id => id != null);
+        let admins = [];
+        if (adminIds.length > 0) {
+            const { data: adm, error: admError } = await supabase
+                .from('usuarios')
+                .select('id_usuario, nombre, correo')
+                .in('id_usuario', adminIds);
+            if (admError) throw admError;
+            admins = adm || [];
+        }
+
+        // Obtener los reportes correspondientes
+        const reportIds = bloqueos.map(b => b.reporte_id).filter(id => id != null);
+        let reports = [];
+        if (reportIds.length > 0) {
+            const { data: reps, error: repsError } = await supabase
+                .from('reportes')
+                .select('id_reporte, descripcion')
+                .in('id_reporte', reportIds);
+            if (repsError) throw repsError;
+            reports = reps || [];
+        }
+
+        const data = bloqueos.map(b => {
+            const admin = admins.find(a => a.id_usuario === b.desbloqueado_por);
+            const report = reports.find(r => r.id_reporte === b.reporte_id);
+            return {
+                ...b,
+                reporte: report || null,
+                admin_desbloqueo: admin || null
+            };
+        });
+
         res.json(data);
     } catch (err) {
         next(err);
