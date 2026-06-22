@@ -10,7 +10,7 @@ const getReportes = async (req, res, next) => {
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
-                estados(nombre, color),
+                estados(*),
                 analisis_ia(
                     es_valido,
                     prioridad,
@@ -192,7 +192,7 @@ const updateReporte = async (req, res, next) => {
                 *,
                 usuarios(nombre, correo),
                 categorias(nombre, areas(nombre)),
-                estados(nombre, color)
+                estados(*)
             `)
             .single();
 
@@ -511,11 +511,11 @@ const getHistorialIA = async (req, res, next) => {
                 reporte_actual:reportes(
                     *,
                     categorias(nombre),
-                    estados(nombre, color),
+                    estados(*),
                     analisis_ia(es_valido, prioridad, categoria_sugerida, justificacion, fecha_analisis)
                 ),
                 categoria_original:categorias(nombre),
-                estado_original:estados(nombre, color)
+                estado_original:estados(*)
             `)
             .order('fecha_modificacion', { ascending: false });
 
